@@ -1,0 +1,2 @@
+# MNIST_Classifier
+Implementation of a MNIST classifier that classifies hand written digits from the MNIST dataset. The project contains two classifier implementations. The first uses regular learning on the entire dataset while the second utilizes active learning to select the best data for the learning process. The project also contains a module that draws a graph using matplotlib that displays the accuracy of the two implementations on different dataset sizes.
