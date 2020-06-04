@@ -17,7 +17,7 @@ def least_confidence_sampling(num_of_data_to_add, unlabeled_loader, model, devic
     with torch.no_grad():
         new_indexes = list()
         to_delete = list()
-        while len(new_indexes) < num_of_data_to_add:
+        while len(new_indexes) < num_of_data_to_add and len(unlabeled_loader.dataset) > 0:
             for data_unlabeled in unlabeled_loader:
                 indexes, images = data_unlabeled[0].to(device), data_unlabeled[1].to(device)
                 outputs = model(images)
@@ -43,7 +43,7 @@ def margin_sampling(num_of_data_to_add, unlabeled_loader, model, device):
     with torch.no_grad():
         new_indexes = list()
         to_delete = list()
-        while len(new_indexes) < num_of_data_to_add:
+        while len(new_indexes) < num_of_data_to_add and len(unlabeled_loader.dataset) > 0:
             for data_unlabeled in unlabeled_loader:
                 indexes, images = data_unlabeled[0].to(device), data_unlabeled[1].to(device)
                 outputs = model(images)
@@ -69,7 +69,7 @@ def entropy_sampling(num_of_data_to_add, unlabeled_loader, model, device):
     with torch.no_grad():
         new_indexes = list()
         to_delete = list()
-        while len(new_indexes) < num_of_data_to_add:
+        while len(new_indexes) < num_of_data_to_add and len(unlabeled_loader.dataset) > 0:
             for data_unlabeled in unlabeled_loader:
                 indexes, images = data_unlabeled[0].to(device), data_unlabeled[1].to(device)
                 outputs = model(images)
@@ -114,7 +114,8 @@ class MnistClassifier(nn.Module):
         return x
 
 
-def main(sampling_parameter=None):
+def main(seed_size=None, train_test_batch_size=None, unlabeled_batch_size = None, num_of_data_to_add=None,
+         sampling_parameter=None):
     directory = './data'
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Selected device: " + str(device))
@@ -122,10 +123,14 @@ def main(sampling_parameter=None):
         os.mkdir(directory)
     train_set = datasets.MNIST(directory, train=True, transform=transforms.ToTensor(), download=True)
     test_set = datasets.MNIST(directory, train=False, transform=transforms.ToTensor(), download=True)
-    seed_size = int(input("Enter desired number of data in initial seed: "))
-    train_test_batch_size = int(input("Enter size of batch for training and testing: "))
-    unlabeled_batch_size = int(input("Enter size of batch from which to add unlabeled data: "))
-    num_of_data_to_add= int(input("Enter number of new data to add to the train set in each epoch: "))
+    if not seed_size:
+        seed_size = int(input("Enter desired number of data in initial seed: "))
+    if not train_test_batch_size:
+        train_test_batch_size = int(input("Enter size of batch for testing and validation: "))
+    if not unlabeled_batch_size:
+        unlabeled_batch_size = int(input("Enter size of batch from which to add unlabeled data: "))
+    if not num_of_data_to_add:
+        num_of_data_to_add = int(input("Enter number of new data to add to the train set in each epoch: "))
     while True:
         if not sampling_parameter:
             method = input("Choose sampling method for unlabeled data from the available methods:\n"
@@ -173,23 +178,13 @@ def main(sampling_parameter=None):
     loss_func = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters())
 
-    print("Started training on initial seed.")
-    for data_labeled in labeled_loader:
-        inputs, labels = data_labeled[0].to(device), data_labeled[1].to(device)
-        optimizer.zero_grad()
-        outputs = model(inputs)
-        loss = loss_func(outputs, labels)
-        loss.backward()
-        optimizer.step()
-    print("Completed training on initial seed.")
-
     sizes_of_data = list()
     accuracies = list()
-    for epoch in range(10):
+
+    print("Started training on initial seed.")
+    for epoch in range(15):
         print("Started training in epoch %d." % (epoch + 1))
-        if len(unlabeled_dataset) > 0:
-            labeled_dataset.list_of_indexes += sampling_method(num_of_data_to_add, unlabeled_loader, model, device)
-        for i, data_labeled in enumerate(labeled_loader, 1):
+        for data_labeled in labeled_loader:
             inputs, labels = data_labeled[0].to(device), data_labeled[1].to(device)
             optimizer.zero_grad()
             outputs = model(inputs)
@@ -198,6 +193,39 @@ def main(sampling_parameter=None):
             optimizer.step()
             # print("Epoch: %d, batch: %d, loss: %f" % (epoch + 1, i, loss.item()))
         print("Finished training in epoch %d." % (epoch + 1))
+    print("Completed training on initial seed.")
+    print("Evaluating model on test set.")
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for test_data in test_loader:
+            images, labels = test_data[0].to(device), test_data[1].to(device)
+            outputs = model(images)
+            probs = F.softmax(outputs, dim=1)
+            _, predicted = torch.max(probs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+    sizes_of_data.append(len(labeled_dataset))
+    accuracies.append(round(correct / total, 2))
+    print("Evaluation complete.")
+    # print("Accuracy of model is: %.2f%%" % (100 * (correct / total)))
+
+    for iteration in range(10):
+        print("Started training in iteration %d." % (iteration + 1))
+        if len(unlabeled_dataset) > 0:
+            labeled_dataset.list_of_indexes += sampling_method(num_of_data_to_add, unlabeled_loader, model, device)
+        for epoch in range(15):
+            print("Started training in epoch %d." % (epoch + 1))
+            for i, data_labeled in enumerate(labeled_loader, 1):
+                inputs, labels = data_labeled[0].to(device), data_labeled[1].to(device)
+                optimizer.zero_grad()
+                outputs = model(inputs)
+                loss = loss_func(outputs, labels)
+                loss.backward()
+                optimizer.step()
+                # print("Epoch: %d, batch: %d, loss: %f" % (epoch + 1, i, loss.item()))
+            print("Finished training in epoch %d." % (epoch + 1))
+        print("Finished training in iteration %d." % (iteration + 1))
         print("Evaluating model on test set.")
         correct = 0
         total = 0

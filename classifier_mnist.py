@@ -34,7 +34,7 @@ class MnistClassifier(nn.Module):
         return x
 
 
-def main():
+def main(num_of_data=None, batch_size=None):
     directory = './data'
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print("Selected device: " + str(device))
@@ -42,7 +42,8 @@ def main():
         os.mkdir(directory)
     train_set = datasets.MNIST(directory, train=True, transform=transforms.ToTensor(), download=True)
     test_set = datasets.MNIST(directory, train=False, transform=transforms.ToTensor(), download=True)
-    num_of_data = int(input("Enter number of data to train on: "))
+    if not num_of_data:
+        num_of_data = int(input("Enter number of data to train on: "))
     if num_of_data == len(train_set):
         train_dataset = train_set
     else:
@@ -52,7 +53,8 @@ def main():
             if index not in indexes:
                 indexes.append(index)
         train_dataset = CustomLabeledDataset(train_set, indexes)
-    batch_size = int(input("Enter desired batch size: "))
+    if not batch_size:
+        batch_size = int(input("Enter desired batch size: "))
     train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=batch_size, shuffle=True,
                                                pin_memory=True, num_workers=multiprocessing.cpu_count())
     test_loader = torch.utils.data.DataLoader(dataset=test_set, batch_size=batch_size, pin_memory=True,
